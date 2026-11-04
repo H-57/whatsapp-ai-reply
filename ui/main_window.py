@@ -4,6 +4,7 @@ from PySide6.QtCore import QThread, Signal, Slot
 from browser.whatsapp_browser import WhatsAppBrowser
 from storage.database import Database
 from ai.reply_generator import ReplyGenerator
+from ui.ai_settings_dialog import AISettingsDialog
 
 class BrowserThread(QThread):
     contact_detected = Signal(str)
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
         self.resize(600, 800)
         
         self.profile_dir = profile_dir
+        self.db = Database()
         self.browser_thread = None
         self.current_contact = None
         self.current_messages = []
@@ -149,6 +151,12 @@ class MainWindow(QMainWindow):
         self.start_btn = QPushButton("Start (Detect Chat)")
         self.start_btn.clicked.connect(self.on_start_clicked)
         controls_layout.addWidget(self.start_btn)
+
+        self.ai_config_btn = QPushButton("⚙️ AI Persona & Mini RAG")
+        self.ai_config_btn.setStyleSheet("font-weight: bold;")
+        self.ai_config_btn.clicked.connect(self.open_ai_settings)
+        controls_layout.addWidget(self.ai_config_btn)
+        
         layout.addLayout(controls_layout)
 
         # Chat info
@@ -266,6 +274,10 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Auto-Reply ENABLED: Monitoring current chat...")
         else:
             self.status_label.setText("Auto-Reply DISABLED.")
+
+    def open_ai_settings(self):
+        dialog = AISettingsDialog(db=self.db, parent=self)
+        dialog.exec()
 
     def closeEvent(self, event):
         if self.browser_thread:

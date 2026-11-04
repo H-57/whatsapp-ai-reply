@@ -12,5 +12,5 @@ MESSAGE_ROW = 'div[data-id]'
 MESSAGE_IN_CLASS = 'message-in' # No longer reliably used by WA
 MESSAGE_OUT_CLASS = 'message-out' # No longer reliably used by WA
 
-# Selector for the text within a message
-MESSAGE_TEXT = 'span.selectable-text[dir="ltr"]'
+# Selector for the text within a message (including emojis rendered inline or as text)
+MESSAGE_TEXT = 'span.selectable-text, span.copyable-text'

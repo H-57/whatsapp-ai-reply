@@ -55,41 +55,84 @@ class WhatsAppBrowser:
             if not current_contact:
                 current_contact = ""
 
-            # Get all message rows in the current chat
-            message_nodes = self.page.locator(f'{MAIN_PANE} {MESSAGE_ROW}').all()
+            # Use JavaScript evaluation to accurately extract messages, texts, and emojis
+            # WhatsApp Web renders emojis either as unicode characters or as <img alt="😊" data-plain-text="😊">
+            js_script = """
+            (currentContact) => {
+                const main = document.querySelector('#main');
+                if (!main) return [];
+
+                // Message rows usually have data-id attribute
+                const rows = Array.from(main.querySelectorAll('div[data-id]'));
+                const results = [];
+
+                for (const row of rows) {
+                    // 1. Identify sender from data-pre-plain-text attribute
+                    // e.g. [10:30 am, 12/08/2026] Contact Name:
+                    const prePlainEl = row.querySelector('[data-pre-plain-text]') || row;
+                    const prePlainText = prePlainEl.getAttribute('data-pre-plain-text') || '';
+                    
+                    let sender = 'unknown';
+                    const match = prePlainText.match(/\[.*?\]\s*([^:]+):/);
+                    if (match) {
+                        const senderName = match[1].trim();
+                        sender = (senderName === currentContact.trim()) ? 'contact' : 'me';
+                    } else {
+                        // Check if message row has message-in or message-out classes
+                        if (row.classList.contains('message-in')) {
+                            sender = 'contact';
+                        } else if (row.classList.contains('message-out')) {
+                            sender = 'me';
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    // 2. Extract message text including emojis
+                    // Look for copyable-text container or selectable-text
+                    const textContainer = row.querySelector('.copyable-text, .selectable-text');
+                    let messageText = '';
+
+                    if (textContainer) {
+                        // Extract text and substitute <img> emojis with their alt / data-plain-text attribute
+                        const clone = textContainer.cloneNode(true);
+                        const emojiImgs = clone.querySelectorAll('img[data-plain-text], img[alt]');
+                        emojiImgs.forEach(img => {
+                            const emojiChar = img.getAttribute('data-plain-text') || img.getAttribute('alt') || '';
+                            const textNode = document.createTextNode(emojiChar);
+                            img.parentNode.replaceChild(textNode, img);
+                        });
+                        messageText = (clone.textContent || '').trim();
+                    }
+
+                    // Fallback: check standalone emoji images if textContainer is missing or empty
+                    if (!messageText) {
+                        const standaloneEmoji = row.querySelectorAll('img[data-plain-text], img[alt]');
+                        const emojis = [];
+                        standaloneEmoji.forEach(img => {
+                            const char = img.getAttribute('data-plain-text') || img.getAttribute('alt');
+                            if (char) emojis.push(char);
+                        });
+                        if (emojis.length > 0) {
+                            messageText = emojis.join('');
+                        }
+                    }
+
+                    // Remove time stamps or invisible unicode formatting markers
+                    messageText = messageText.replace(/[\\u200e\\u200f\\u202a-\\u202e]/g, '').trim();
+
+                    if (messageText) {
+                        results.push({ sender, text: messageText });
+                    }
+                }
+
+                return results;
+            }
+            """
             
-            # Take the last 'limit' nodes
-            recent_nodes = message_nodes[-limit:] if len(message_nodes) > limit else message_nodes
-            
-            import re
-            
-            for node in recent_nodes:
-                sender = "unknown"
-                text = ""
-                
-                html = node.inner_html()
-                
-                # WhatsApp uses data-pre-plain-text inside the message node which has the sender name
-                # e.g., data-pre-plain-text="[2:16 pm, 12/08/2026] Contact Name: "
-                pre_plain = re.search(r'data-pre-plain-text="\[.*?\]\s*([^:]+):', html)
-                if pre_plain:
-                    sender_name = pre_plain.group(1).strip()
-                    if sender_name == current_contact:
-                        sender = "contact"
-                    else:
-                        sender = "me"
-                else:
-                    # System messages or other elements
-                    continue
-                
-                # Get text
-                text_locator = node.locator(MESSAGE_TEXT)
-                if text_locator.count() > 0:
-                    texts = text_locator.all_inner_texts()
-                    text = " ".join(texts)
-                
-                if text:
-                    messages.append({"sender": sender, "text": text})
+            raw_messages = self.page.evaluate(js_script, current_contact)
+            if raw_messages:
+                messages = raw_messages[-limit:] if len(raw_messages) > limit else raw_messages
                     
         except Exception as e:
             print(f"Error reading messages: {e}")
@@ -112,8 +155,18 @@ class WhatsAppBrowser:
             if not input_box.is_visible():
                 raise ValueError("Message input not found")
                 
-            input_box.fill("")
-            input_box.type(text, delay=10)
+            # Clear and focus input
+            input_box.click()
+            
+            # Use page.keyboard.insert_text or execCommand to insert text containing multi-byte emojis reliably
+            try:
+                # insert_text preserves Unicode emojis correctly in contenteditable divs
+                self.page.keyboard.insert_text(text)
+            except Exception:
+                input_box.fill("")
+                input_box.type(text, delay=10)
+            
+            self.page.wait_for_timeout(300)
             
             # Send button typically appears after typing
             send_btn = footer.locator('button[aria-label="Send"]')

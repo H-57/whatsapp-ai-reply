@@ -15,6 +15,8 @@ Operates securely and locally via Playwright browser automation and Google Gemin
 - **Flexible Modes**:
   - **Assisted Mode**: View recent messages, click *Generate Reply*, edit the suggested message in the UI, and click *Send*.
   - **Full Auto-Reply Mode**: Check *Enable Full Auto-Reply (Current Chat Only)* to let Gemini automatically reply in real-time to incoming messages in the open chat.
+- **⚙️ Custom AI Persona & Prompt (GUI Popup)**: Configure custom instructions and behavior directly inside the app without touching any code. Stored permanently in SQLite DB.
+- **📚 Built-in Mini RAG (Knowledge Base)**: Feed company details, pricing, FAQs, or any large reference text. The AI automatically retrieves the right chunks to answer questions accurately.
 - **Modern AI Integration**: Powered by Google's latest `google-genai` SDK with configurable models (e.g., `gemini-1.5-flash`).
 
 ---
